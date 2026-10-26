@@ -1,0 +1,94 @@
+{
+  "relacoes": {
+    "equivalente": "Mesmo dado nos dois bancos",
+    "parcial": "Dado parecido, com formato, nível ou significado diferente",
+    "so_pnipe": "Só existe no PNIPE",
+    "so_vip": "Só existe no VIP"
+  },
+  "entidades": [
+    {
+      "chave": "instituicao",
+      "nome": "Instituição",
+      "pnipe": "Instituição (uma por CNPJ)",
+      "vip": ["INS_Instituicao", "CAM_Campus"],
+      "nota": "No PNIPE cada CNPJ é uma instituição, e o endereço fica nela. No VIP a instituição tem campi, e o endereço fica no campus.",
+      "campos": [
+        { "pnipe": "cnpj", "vip": "INS_Instituicao.ins_nu_cnpj", "relacao": "equivalente", "nota": "Chave de ligação entre os bancos. O VIP guarda com pontuação; o PNIPE, só os dígitos." },
+        { "pnipe": "social_reason", "vip": "INS_Instituicao.ins_nm_nome", "relacao": "equivalente" },
+        { "pnipe": "initials", "vip": "INS_Instituicao.ins_sg_instituicao", "relacao": "equivalente" },
+        { "pnipe": "street / number", "pnipe_col": "street", "vip": "CAM_Campus.cam_ds_endereco", "relacao": "parcial", "nota": "No VIP o endereço é do campus." },
+        { "pnipe": "complement", "vip": "CAM_Campus.cam_ds_complemento", "relacao": "parcial" },
+        { "pnipe": "district", "vip": "CAM_Campus.cam_nm_bairro", "relacao": "parcial" },
+        { "pnipe": "city", "vip": "CAM_Campus.cam_nm_cidade", "relacao": "parcial" },
+        { "pnipe": "state", "vip": "CAM_Campus.cam_sg_estado", "relacao": "parcial" },
+        { "pnipe": "zipCode", "vip": "CAM_Campus.cam_nu_cep", "relacao": "parcial" },
+        { "pnipe": "phoneNumber", "vip": "CAM_Campus.cam_nu_telefone", "relacao": "parcial" },
+        { "pnipe": "totalLab / totalEquip", "pnipe_col": "totalLab", "vip": null, "relacao": "parcial", "nota": "O PNIPE guarda os totais; no VIP eles são contados nas tabelas." },
+        { "pnipe": null, "vip": "INS_Instituicao.ins_ds_descricao", "relacao": "so_vip" },
+        { "pnipe": null, "vip": "UO_Unidade_Organizacional", "relacao": "so_vip", "nota": "Departamentos e unidades da instituição." },
+        { "pnipe": null, "vip": "CRS_Curso", "relacao": "so_vip", "nota": "Cursos da instituição." }
+      ]
+    },
+    {
+      "chave": "laboratorio",
+      "nome": "Laboratório",
+      "pnipe": "Laboratório",
+      "vip": ["LOC_Localizacao", "EPF_Espaco_Fisico"],
+      "nota": "O PNIPE tem um nível só. Muitas vezes ele cadastra um centro inteiro (CBG, CME, CPqCTR), que no VIP é uma localização com vários espaços físicos dentro.",
+      "campos": [
+        { "pnipe": "idAsset", "vip": "EPF_Espaco_Fisico.epf_cd_espfisico", "relacao": "parcial", "nota": "Códigos independentes; não há chave comum." },
+        { "pnipe": "name", "vip": "EPF_Espaco_Fisico.epf_nm_espfisico", "relacao": "equivalente", "nota": "Para centros, o equivalente é LOC_Localizacao.loc_nm_localizacao." },
+        { "pnipe": "initials", "vip": "EPF_Espaco_Fisico.epf_sg_espfisico", "relacao": "equivalente" },
+        { "pnipe": "about", "vip": "EPF_Espaco_Fisico.epf_ds_espfisico", "relacao": "equivalente" },
+        { "pnipe": "areas_expertise", "vip": "EPF_Espaco_Fisico.epf_ds_areas", "relacao": "equivalente", "nota": "No PNIPE é uma lista; no VIP, texto livre." },
+        { "pnipe": "techniques", "vip": "EPF_Espaco_Fisico.epf_ds_atividades", "relacao": "parcial", "nota": "Técnicas (PNIPE) × atividades (VIP)." },
+        { "pnipe": "website", "vip": "EPF_Espaco_Fisico.epf_website", "relacao": "equivalente" },
+        { "pnipe": "contact_phone", "vip": "EPF_Espaco_Fisico.epf_tel_contato", "relacao": "equivalente" },
+        { "pnipe": "contact_name", "vip": "EPFP_EspFisico_Pessoa", "relacao": "parcial", "nota": "No VIP o responsável é uma pessoa cadastrada (PES_Pessoa)." },
+        { "pnipe": "hasSharing / sharingType", "pnipe_col": "hasSharing", "vip": "EPF_Espaco_Fisico.epf_st_multiusuario", "relacao": "parcial", "nota": "Compartilhamento (PNIPE) × uso multiusuário (VIP)." },
+        { "pnipe": "primary_image_url", "vip": "EPFI_EspFisico_Imagem", "relacao": "equivalente", "nota": "Fotos do laboratório." },
+        { "pnipe": "address_*", "pnipe_col": "address_zipCode", "vip": "LOC_Localizacao → CAM_Campus", "relacao": "parcial", "nota": "No VIP o endereço vem do campus. Na planilha, as colunas de endereço do PNIPE estão deslocadas." },
+        { "pnipe": "createdDate", "vip": "EPF_Espaco_Fisico.epf_dt_atualizacao", "relacao": "parcial", "nota": "Criação (PNIPE) × última atualização (VIP)." },
+        { "pnipe": "email", "vip": null, "relacao": "so_pnipe" },
+        { "pnipe": "latitude / longitude", "pnipe_col": "latitude", "vip": null, "relacao": "so_pnipe" },
+        { "pnipe": "ownShareLink", "vip": null, "relacao": "so_pnipe", "nota": "Link próprio de agendamento." },
+        { "pnipe": null, "vip": "EPF_Espaco_Fisico.epf_cd_sala", "relacao": "so_vip" },
+        { "pnipe": null, "vip": "EPF_Espaco_Fisico.epf_cd_tipo_epf", "relacao": "so_vip", "nota": "Tipo do espaço (TEPF_Tipo_EspFisico)." },
+        { "pnipe": null, "vip": "EPF_Espaco_Fisico.epf_st_ensino", "relacao": "so_vip", "nota": "Finalidades: ensino, pesquisa e extensão." },
+        { "pnipe": null, "vip": "EPF_Espaco_Fisico.epf_nu_capacidade", "relacao": "so_vip" },
+        { "pnipe": null, "vip": "EPF_Espaco_Fisico.epf_ds_palavras_chave", "relacao": "so_vip" },
+        { "pnipe": null, "vip": "EPF_Espaco_Fisico.epf_ds_regulamento", "relacao": "so_vip" },
+        { "pnipe": null, "vip": "EPFC_EspFisico_Curso", "relacao": "so_vip", "nota": "Cursos atendidos." }
+      ]
+    },
+    {
+      "chave": "equipamento",
+      "nome": "Equipamento",
+      "pnipe": "Equipamento",
+      "vip": ["EQP_Equipamento"],
+      "nota": "Mesmo conceito nos dois bancos. O PNIPE publica só equipamentos multiusuário.",
+      "campos": [
+        { "pnipe": "idAsset", "vip": "EQP_Equipamento.eqp_cd_equipamento", "relacao": "parcial", "nota": "Códigos independentes; não há chave comum." },
+        { "pnipe": "idLab", "vip": "EQP_Equipamento.eqp_cd_espaco_fisico", "relacao": "equivalente" },
+        { "pnipe": "name", "vip": "EQP_Equipamento.eqp_nm_equipamento", "relacao": "equivalente" },
+        { "pnipe": "initials", "vip": "EQP_Equipamento.eqp_sigla", "relacao": "equivalente" },
+        { "pnipe": "about", "vip": "EQP_Equipamento.eqp_ds_descricao", "relacao": "equivalente" },
+        { "pnipe": "brand", "vip": "EQP_Equipamento.eqp_cd_fabricante", "relacao": "parcial", "nota": "Texto livre no PNIPE; tabela de fabricantes (FAB_Fabricante) no VIP." },
+        { "pnipe": "model", "vip": "EQP_Equipamento.eqp_ds_modelo", "relacao": "equivalente", "nota": "Melhor campo para achar o mesmo equipamento nos dois bancos." },
+        { "pnipe": "purchaseYear", "vip": "EQP_Equipamento.eqp_nu_ano_aquisicao", "relacao": "equivalente", "nota": "No VIP, 1900 significa ano não informado." },
+        { "pnipe": "link", "vip": "EQP_Equipamento.eqp_link_site_fabricante", "relacao": "equivalente" },
+        { "pnipe": "denominations", "vip": "EQP_Equipamento.eqp_outras_denominacoes", "relacao": "equivalente" },
+        { "pnipe": "code", "vip": "EQP_Equipamento.eqp_cod_codigo", "relacao": "parcial", "nota": "O PNIPE gera o próprio código (\"Cod…\")." },
+        { "pnipe": "situation", "vip": "EQP_Equipamento.eqp_status", "relacao": "equivalente", "nota": "ACTIVE/INACTIVE × A/I." },
+        { "pnipe": "hasSharing / sharingType", "pnipe_col": "hasSharing", "vip": "PEQP_Parceria_Eqp", "relacao": "parcial", "nota": "No VIP o compartilhamento é registrado como parceria (tabela vazia hoje)." },
+        { "pnipe": "primary_image_url", "vip": "EQPI_Equipamento_Imagem", "relacao": "equivalente", "nota": "Fotos do equipamento." },
+        { "pnipe": "techniques", "vip": null, "relacao": "so_pnipe" },
+        { "pnipe": "parameters", "vip": null, "relacao": "so_pnipe", "nota": "Parâmetros técnicos (potência, capacidade…)." },
+        { "pnipe": "contact_name / email", "pnipe_col": "email", "vip": null, "relacao": "so_pnipe", "nota": "Contato por equipamento." },
+        { "pnipe": null, "vip": "EQP_Equipamento.eqp_nu_tombo", "relacao": "so_vip", "nota": "Número de patrimônio." },
+        { "pnipe": null, "vip": "EQP_Equipamento.eqp_quantidade", "relacao": "so_vip" },
+        { "pnipe": null, "vip": "EQP_Equipamento.eqp_cd_agencia_fomento_cientifico", "relacao": "so_vip", "nota": "Agência que financiou (AFC_Agencia_Fomento_Cientifico)." }
+      ]
+    }
+  ]
+}

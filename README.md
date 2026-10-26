@@ -23,3 +23,7 @@ O `.env` não é versionado. Use um usuário do banco somente leitura. Não abra
 - `public/js/config.js` — título, texto do rodapé e origem da API.
 - `public/js/lib/` — formatação, cores e cliente da API.
 - `public/js/components/` e `public/js/App.js` — interface em React (um arquivo por componente).
+- `dados/` — dados do PNIPE para a aba "Correlação VIP × PNIPE" (seção Banco de Dados):
+  - `pnipe_observatorio.xlsx` — planilha original; depois de trocá-la, rode `node scripts/pnipe-para-json.js` para gerar `pnipe.json`;
+  - `dicionario_pnipe_vip.json` — campo do PNIPE ↔ coluna do VIP;
+  - `correspondencia_pnipe_vip.json` — laboratório do PNIPE ↔ localização/espaço físico do VIP (feita à mão).

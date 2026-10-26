@@ -1,0 +1,23 @@
+{
+  "_sobre": "Correspondência manual entre laboratórios do PNIPE (id = idAsset) e registros do VIP (locais = LOC_Localizacao, labs = EPF_Espaco_Fisico). grau: igual | centro | parcial | sem.",
+  "UESC": [
+    { "pnipe": "8495", "grau": "centro", "locais": [32], "nota": "Central multiusuário do IPAF." },
+    { "pnipe": "10937", "grau": "centro", "locais": [1] },
+    { "pnipe": "309", "grau": "centro", "locais": [5] },
+    { "pnipe": "418", "grau": "centro", "locais": [2] },
+    { "pnipe": "32945", "grau": "centro", "locais": [3] },
+    { "pnipe": "24933", "grau": "igual", "labs": [108], "nota": "Nome no VIP: Biotransformação e Biocatálise Orgânica." },
+    { "pnipe": "25590", "grau": "igual", "labs": [116, 131], "nota": "O VIP tem dois cadastros com este nome." },
+    { "pnipe": "377", "grau": "igual", "labs": [6] },
+    { "pnipe": "736", "grau": "igual", "labs": [40] },
+    { "pnipe": "33513", "grau": "parcial", "labs": [2], "nota": "Centro sem cadastro próprio no VIP; parte dos equipamentos coincide com o Laboratório de Biotecnologia Microbiana." },
+    { "pnipe": "41955", "grau": "parcial", "labs": [47, 11], "nota": "No VIP as coleções estão separadas por grupo." },
+    { "pnipe": "634", "grau": "parcial", "labs": [56], "nota": "Provável: Nutrição e Alimentação de Peixes." },
+    { "pnipe": "30982", "grau": "sem" },
+    { "pnipe": "44342", "grau": "sem" },
+    { "pnipe": "26804", "grau": "sem" },
+    { "pnipe": "13096", "grau": "sem" },
+    { "pnipe": "31781", "grau": "sem" },
+    { "pnipe": "32488", "grau": "sem" }
+  ]
+}

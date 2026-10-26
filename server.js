@@ -209,6 +209,165 @@ app.get('/api/esquema', wrap(async (req, res) => {
   });
 }));
 
+// Correlação com o PNIPE (Plataforma Nacional de Infraestrutura de Pesquisa, MCTI).
+// dados/pnipe.json vem de scripts/pnipe-para-json.js; o dicionário e a correspondência são mantidos à mão.
+const DADOS = path.join(__dirname, 'dados');
+const lerJson = (nome) => JSON.parse(fs.readFileSync(path.join(DADOS, nome), 'utf8'));
+const soDigitos = (s) => String(s || '').replace(/\D/g, '');
+const normModelo = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+// Tabelas do VIP cujo preenchimento é medido (somente registros ativos) e a coluna de status de cada uma.
+const STATUS_DA_TABELA = { INS_Instituicao: 'ins_status', CAM_Campus: 'cam_status', EPF_Espaco_Fisico: 'epf_status', EQP_Equipamento: 'eqp_status' };
+// Campos que não são uma coluna simples: conta o registro como preenchido se a expressão não for nula.
+const PREENCHIMENTO_ESPECIAL = {
+  'EQP_Equipamento.eqp_nu_ano_aquisicao': ['EQP_Equipamento', 'CASE WHEN eqp_nu_ano_aquisicao > 1900 THEN 1 END'],
+  'EQP_Equipamento.eqp_cd_fabricante': ['EQP_Equipamento', `CASE WHEN eqp_cd_fabricante NOT IN
+    (SELECT fab_cd_fabricante FROM FAB_Fabricante WHERE fab_nm_fabricante = 'Não Informado') THEN 1 END`],
+  EPFI_EspFisico_Imagem: ['EPF_Espaco_Fisico', `CASE WHEN EXISTS (SELECT 1 FROM EPFI_EspFisico_Imagem m
+    WHERE m.epfi_cd_epf = epf_cd_espfisico AND m.epfi_status = 'A') THEN 1 END`],
+  EPFP_EspFisico_Pessoa: ['EPF_Espaco_Fisico', 'CASE WHEN EXISTS (SELECT 1 FROM EPFP_EspFisico_Pessoa p WHERE p.epfp_cd_epf = epf_cd_espfisico) THEN 1 END'],
+  EPFC_EspFisico_Curso: ['EPF_Espaco_Fisico', 'CASE WHEN EXISTS (SELECT 1 FROM EPFC_EspFisico_Curso x WHERE x.epfc_cd_epf = epf_cd_espfisico) THEN 1 END'],
+  EQPI_Equipamento_Imagem: ['EQP_Equipamento', `CASE WHEN EXISTS (SELECT 1 FROM EQPI_Equipamento_Imagem m
+    WHERE m.eqpi_cd_eqp = eqp_cd_equipamento AND m.eqpi_status = 'A') THEN 1 END`],
+  PEQP_Parceria_Eqp: ['EQP_Equipamento', 'CASE WHEN EXISTS (SELECT 1 FROM PEQP_Parceria_Eqp x WHERE x.peqp_cd_eqp = eqp_cd_equipamento) THEN 1 END'],
+};
+
+// Percentual de registros ativos do VIP com cada campo do dicionário preenchido. Chave = "Tabela.coluna" ou nome da tabela.
+async function preenchimentoVip(pool, chaves) {
+  const existentes = new Set((await pool.request().query(`SELECT t.name + '.' + c.name nome FROM sys.tables t
+    JOIN sys.columns c ON c.object_id = t.object_id`)).recordset.map((r) => r.nome));
+  const porTabela = {};
+  for (const chave of chaves) {
+    const especial = PREENCHIMENTO_ESPECIAL[chave];
+    const [tabela, coluna] = especial ? [especial[0]] : chave.split('.');
+    // Só colunas simples que existem de fato no banco; o nome entra na SQL entre colchetes.
+    if (!STATUS_DA_TABELA[tabela] || (!especial && (!coluna || !existentes.has(chave)))) continue;
+    const expr = especial ? especial[1] : `NULLIF(LTRIM(RTRIM(CAST([${coluna}] AS nvarchar(max)))), '')`;
+    (porTabela[tabela] ||= []).push([chave, expr]);
+  }
+  const resultado = {};
+  await Promise.all(Object.entries(porTabela).map(async ([tabela, itens]) => {
+    // As expressões ficam numa subconsulta porque o SQL Server não aceita subconsulta dentro de COUNT().
+    const linha = (await pool.request().query(`SELECT COUNT(*) total, ${itens.map((_, i) => `COUNT(c${i}) c${i}`).join(', ')}
+      FROM (SELECT ${itens.map(([, e], i) => `${e} c${i}`).join(', ')}
+        FROM [${tabela}] WHERE ${STATUS_DA_TABELA[tabela]} = 'A') x`)).recordset[0];
+    itens.forEach(([chave], i) => { resultado[chave] = linha.total ? linha[`c${i}`] / linha.total : null; });
+  }));
+  return resultado;
+}
+
+app.get('/api/pnipe', wrap(async (req, res) => {
+  let pnipe, dicionario, correspondencia;
+  try {
+    [pnipe, dicionario, correspondencia] = ['pnipe.json', 'dicionario_pnipe_vip.json', 'correspondencia_pnipe_vip.json'].map(lerJson);
+  } catch (e) {
+    console.error(e.message);
+    return res.status(404).json({ erro: 'Dados do PNIPE não encontrados. Gere com: node scripts/pnipe-para-json.js' });
+  }
+  const pool = await getPool();
+  const run = async (q) => (await pool.request().query(q)).recordset;
+  const chavesVip = dicionario.entidades.flatMap((e) => e.campos.map((c) => c.vip).filter(Boolean));
+
+  const [insts, labs, locais, equipVip, preenchVip] = await Promise.all([
+    // Apelido "ins" (e não "i"), porque LAB_BASE já usa "i" para a instituição dentro da subconsulta.
+    run(`SELECT ins.ins_cd_instituicao id, ins.ins_sg_instituicao sigla, ins.ins_nu_cnpj cnpj,
+        (SELECT COUNT(*) ${LAB_BASE} AND c.cam_cd_instituicao = ins.ins_cd_instituicao) laboratorios,
+        (SELECT COUNT(*) ${LAB_BASE.replace('WHERE', 'JOIN EQP_Equipamento q ON q.eqp_cd_espaco_fisico = e.epf_cd_espfisico WHERE')}
+          AND q.eqp_status = 'A' AND c.cam_cd_instituicao = ins.ins_cd_instituicao) equipamentos
+      FROM INS_Instituicao ins WHERE ins.ins_status = 'A'`),
+    run(`SELECT e.epf_cd_espfisico id, e.epf_nm_espfisico nome, l.loc_cd_localizacao local_id, l.loc_nm_localizacao local,
+        i.ins_sg_instituicao instituicao,
+        (SELECT COUNT(*) FROM EQP_Equipamento q WHERE q.eqp_cd_espaco_fisico = e.epf_cd_espfisico AND q.eqp_status = 'A') equipamentos
+      ${LAB_BASE}`),
+    run(`SELECT loc_cd_localizacao id, loc_nm_localizacao nome FROM LOC_Localizacao`),
+    run(`SELECT q.eqp_nm_equipamento nome, q.eqp_ds_modelo modelo, e.epf_cd_espfisico lab, i.ins_sg_instituicao instituicao
+      ${LAB_BASE.replace('WHERE', 'JOIN EQP_Equipamento q ON q.eqp_cd_espaco_fisico = e.epf_cd_espfisico WHERE')}
+        AND q.eqp_status = 'A' AND NULLIF(LTRIM(RTRIM(q.eqp_ds_modelo)), '') IS NOT NULL`),
+    preenchimentoVip(pool, [...new Set(chavesVip)]),
+  ]);
+
+  const labPorId = new Map(labs.map((l) => [l.id, l]));
+  const nomeLocal = new Map(locais.map((l) => [l.id, l.nome]));
+
+  const instituicoes = pnipe.instituicoes.map((p) => {
+    const v = insts.find((i) => p.cnpjs.includes(soDigitos(i.cnpj)));
+    const { sigla, nome, cnpjs, ...numeros } = p;
+    return { sigla, nome, cnpjs, pnipe: numeros, vip: v ? { id: v.id, sigla: v.sigla, laboratorios: v.laboratorios, equipamentos: v.equipamentos } : null };
+  });
+
+  const correspondencias = Object.entries(correspondencia)
+    .filter(([sigla]) => !sigla.startsWith('_'))
+    .map(([sigla, itens]) => {
+      const labsVip = labs.filter((l) => l.instituicao === sigla);
+      // Modelo normalizado → equipamentos do VIP com esse modelo (mínimo 4 caracteres, para evitar "1", "II" etc.).
+      const porModelo = new Map();
+      for (const q of equipVip.filter((q) => q.instituicao === sigla)) {
+        const m = normModelo(q.modelo);
+        if (m.length >= 4) (porModelo.get(m) || porModelo.set(m, []).get(m)).push(q);
+      }
+      const equipPnipe = pnipe.equipamentos.filter((e) => e.sigla_instituicao === sigla);
+      const cobertos = new Set();
+
+      const linhas = itens.map((c) => {
+        const p = pnipe.laboratorios.find((l) => l.id === c.pnipe);
+        const doLab = equipPnipe.filter((e) => e.lab === c.pnipe);
+        const vip = [
+          ...(c.locais || []).map((id) => {
+            const dentro = labsVip.filter((l) => l.local_id === id);
+            dentro.forEach((l) => cobertos.add(l.id));
+            return { tipo: 'local', id, nome: nomeLocal.get(id) || `Localização ${id}`, laboratorios: dentro.length,
+              equipamentos: dentro.reduce((s, l) => s + l.equipamentos, 0) };
+          }),
+          ...(c.labs || []).map((id) => {
+            const l = labPorId.get(id);
+            if (l) cobertos.add(id);
+            return l ? { tipo: 'laboratorio', id, nome: l.nome, local: l.local, equipamentos: l.equipamentos }
+              : { tipo: 'laboratorio', id, nome: `Espaço ${id} (inativo ou removido)`, equipamentos: 0 };
+          }),
+        ];
+        const modelos = doLab.flatMap((e) => (porModelo.get(normModelo(e.modelo)) || []).slice(0, 1).map((q) => ({
+          nome: e.nome, modelo: e.modelo, vip_nome: q.nome, vip_lab: q.lab,
+          vip_lab_nome: labPorId.get(q.lab)?.nome, vip_local: labPorId.get(q.lab)?.local,
+        })));
+        return {
+          pnipe: p ? { id: p.id, nome: p.nome, sigla: p.sigla, url: p.url, equipamentos: doLab.length } : { id: c.pnipe, nome: `Laboratório ${c.pnipe}`, equipamentos: doLab.length },
+          grau: c.grau, nota: c.nota || null, vip, modelos,
+        };
+      });
+
+      const semPar = labsVip.filter((l) => !cobertos.has(l.id));
+      return {
+        instituicao: sigla,
+        itens: linhas,
+        resumo: {
+          pnipe: { laboratorios: linhas.length, equipamentos: equipPnipe.length },
+          vip: { laboratorios: labsVip.length, equipamentos: labsVip.reduce((s, l) => s + l.equipamentos, 0) },
+          por_grau: linhas.reduce((a, l) => ({ ...a, [l.grau]: (a[l.grau] || 0) + 1 }), {}),
+          equip_com_modelo_no_vip: equipPnipe.filter((e) => porModelo.has(normModelo(e.modelo))).length,
+          vip_sem_par: { laboratorios: semPar.length, equipamentos: semPar.reduce((s, l) => s + l.equipamentos, 0) },
+        },
+      };
+    });
+
+  res.json({
+    fonte: pnipe.fonte,
+    gerado_em: pnipe.gerado_em,
+    instituicoes,
+    dicionario: {
+      relacoes: dicionario.relacoes,
+      entidades: dicionario.entidades.map((ent) => ({
+        ...ent,
+        campos: ent.campos.map((c) => ({
+          ...c,
+          preenchimento_pnipe: c.pnipe ? pnipe.preenchimento[ent.chave]?.[c.pnipe_col || c.pnipe] ?? null : null,
+          preenchimento_vip: c.vip ? preenchVip[c.vip] ?? null : null,
+        })),
+      })),
+    },
+    correspondencias,
+  });
+}));
+
 // Busca de laboratórios
 app.get('/api/labs', wrap(async (req, res) => {
   const r = (await getPool()).request();
