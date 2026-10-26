@@ -1,0 +1,17 @@
+{
+  "name": "painel-vip",
+  "version": "1.0.0",
+  "description": "Painel de busca de laboratórios do VIP",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^5.3.0",
+    "mssql": "^12.7.10"
+  }
+}
