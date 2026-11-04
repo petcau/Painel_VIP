@@ -368,6 +368,151 @@ app.get('/api/pnipe', wrap(async (req, res) => {
   });
 }));
 
+// Catálogo público unificado. A origem continua identificada em cada item: os dados são
+// apresentados juntos, sem fingir que VIP e PNIPE são a mesma base.
+const TEMAS = [
+  ['biologia', 'Biologia e biodiversidade', /biolog|biodivers|ecolog|bot[aâ]nic|zoolog|fauna|flora|ambient/i],
+  ['saude', 'Saúde e ciências da vida', /sa[uú]de|medic|farm[aá]|odont|enferm|epidemi|imun|bioqu[ií]m/i],
+  ['agro', 'Ciências agrárias', /agr[aá]r|agro|agric|solo|animal|veterin|alimento|pesca|aquic/i],
+  ['engenharia', 'Engenharia e tecnologia', /engenh|tecnolog|computa|rob[oó]t|automa|materia|ind[uú]str|constru/i],
+  ['energia', 'Energia e sustentabilidade', /energia|solar|e[oó]lic|sustent|combust|petr[oó]leo|g[aá]s|carbono/i],
+  ['exatas', 'Ciências exatas e da Terra', /qu[ií]mic|f[ií]sic|matem[aá]t|geolog|geof[ií]sic|ocean|meteor/i],
+  ['humanas', 'Humanidades e ciências sociais', /human|sociais|educa|hist[oó]r|cultur|arte|m[uú]sic|lingu|direito|econom/i],
+];
+
+const textoBusca = (item) => [item.nome, item.sigla, item.instituicao, item.cidade, item.descricao,
+  item.areas, item.tecnicas, item.modelo, item.marca, item.laboratorio].filter(Boolean).join(' ');
+const temaDoItem = (item) => TEMAS.find(([, , re]) => re.test(textoBusca(item)))?.[0] || 'outros';
+const textoNormalizado = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+function catalogoPnipe() {
+  const pnipe = lerJson('pnipe.json');
+  const labs = new Map(pnipe.laboratorios.map((l) => [String(l.id), l]));
+  const laboratorios = pnipe.laboratorios.map((l) => ({
+    id: `pnipe:lab:${l.id}`, id_origem: String(l.id), fonte: 'pnipe', tipo: 'laboratorio',
+    nome: l.nome, sigla: l.sigla, instituicao: l.sigla_instituicao, instituicao_nome: l.instituicao_nome,
+    cidade: l.cidade, estado: l.estado, descricao: l.descricao, areas: l.areas, tecnicas: l.tecnicas,
+    compartilhado: l.compartilhado, compartilhamento: l.compartilhamento,
+    latitude: l.latitude, longitude: l.longitude, imagem: l.imagem, url: l.url,
+    endereco: [l.logradouro, l.numero, l.complemento, l.bairro, l.cep].filter(Boolean).join(', '),
+    contato: l.contato, telefone: l.telefone, email: l.email, website: l.website,
+    equipamentos: pnipe.equipamentos.filter((e) => String(e.lab) === String(l.id)).length,
+  }));
+  const equipamentos = pnipe.equipamentos.map((e) => {
+    const lab = labs.get(String(e.lab)) || {};
+    return {
+      id: `pnipe:equip:${e.id}`, id_origem: String(e.id), fonte: 'pnipe', tipo: 'equipamento',
+      nome: e.nome, sigla: e.sigla, instituicao: e.sigla_instituicao, cidade: e.cidade || lab.cidade,
+      estado: e.estado || lab.estado, descricao: e.descricao, tecnicas: e.tecnicas,
+      marca: e.marca, modelo: e.modelo, ano: e.ano, ativo: e.ativo, multiusuario: e.multiusuario,
+      compartilhado: e.compartilhado, compartilhamento: e.compartilhamento,
+      laboratorio: e.laboratorio_nome || lab.nome, laboratorio_id: String(e.lab),
+      latitude: lab.latitude, longitude: lab.longitude, imagem: e.imagem, url: e.url,
+      contato: e.contato, telefone: e.telefone, email: e.email, website: e.website,
+      denominacoes: e.denominacoes, parametros: e.parametros,
+    };
+  });
+  return [...laboratorios, ...equipamentos].map((item) => ({ ...item, tema: temaDoItem(item) }));
+}
+
+async function catalogoVip() {
+  const pool = await getPool();
+  const [labs, equipamentos] = await Promise.all([
+    pool.request().query(`SELECT e.epf_cd_espfisico id, e.epf_nm_espfisico nome, e.epf_sg_espfisico sigla,
+      e.epf_ds_espfisico descricao, e.epf_ds_areas areas, e.epf_ds_atividades tecnicas,
+      e.epf_ds_palavras_chave palavras_chave, e.epf_cd_sala sala, e.epf_nu_capacidade capacidade,
+      CASE WHEN e.epf_st_multiusuario = 'S' THEN 1 ELSE 0 END multiusuario,
+      t.tepf_nm_tipo_epf subtipo, l.loc_nm_localizacao local, c.cam_nm_campus campus,
+      c.cam_nm_cidade cidade, c.cam_sg_estado estado, i.ins_sg_instituicao instituicao,
+      (SELECT COUNT(*) FROM EQP_Equipamento q WHERE q.eqp_cd_espaco_fisico = e.epf_cd_espfisico AND q.eqp_status = 'A') equipamentos,
+      (SELECT TOP 1 m.epfi_nm_hash FROM EPFI_EspFisico_Imagem m WHERE m.epfi_cd_epf = e.epf_cd_espfisico AND m.epfi_status = 'A' ORDER BY m.epfi_cd_img) foto_hash
+      ${LAB_BASE}`),
+    pool.request().query(`SELECT q.eqp_cd_equipamento id, q.eqp_nm_equipamento nome, q.eqp_sigla sigla,
+      q.eqp_outras_denominacoes denominacoes, q.eqp_ds_modelo modelo,
+      q.eqp_nu_ano_aquisicao ano, q.eqp_quantidade quantidade, f.fab_nm_fabricante marca,
+      e.epf_cd_espfisico laboratorio_id, e.epf_nm_espfisico laboratorio,
+      c.cam_nm_cidade cidade, c.cam_sg_estado estado, i.ins_sg_instituicao instituicao,
+      CASE WHEN e.epf_st_multiusuario = 'S' THEN 1 ELSE 0 END multiusuario,
+      (SELECT TOP 1 m.eqpi_nm_hash FROM EQPI_Equipamento_Imagem m WHERE m.eqpi_cd_eqp = q.eqp_cd_equipamento AND m.eqpi_status = 'A' ORDER BY m.eqpi_cd_img) foto_hash
+      ${LAB_BASE.replace('WHERE', `JOIN EQP_Equipamento q ON q.eqp_cd_espaco_fisico = e.epf_cd_espfisico
+        LEFT JOIN FAB_Fabricante f ON f.fab_cd_fabricante = q.eqp_cd_fabricante WHERE`)} AND q.eqp_status = 'A'`),
+  ]);
+  return [
+    ...labs.recordset.map(({ foto_hash, ...l }) => ({
+      ...l, id: `vip:lab:${l.id}`, id_origem: String(l.id), fonte: 'vip', tipo: 'laboratorio',
+      imagem: imgUrl('epf', foto_hash), compartilhado: !!l.multiusuario,
+    })),
+    ...equipamentos.recordset.map(({ foto_hash, ...e }) => ({
+      ...e, id: `vip:equip:${e.id}`, id_origem: String(e.id), fonte: 'vip', tipo: 'equipamento',
+      imagem: imgUrl('eqp', foto_hash), compartilhado: !!e.multiusuario,
+    })),
+  ].map((item) => ({ ...item, tema: temaDoItem(item) }));
+}
+
+app.get('/api/vitrine', wrap(async (req, res) => {
+  const fonte = ['vip', 'pnipe'].includes(req.query.fonte) ? req.query.fonte : 'todos';
+  const tipo = ['laboratorio', 'equipamento'].includes(req.query.tipo) ? req.query.tipo : 'todos';
+  const instituicao = String(req.query.instituicao || '').slice(0, 30).toUpperCase();
+  const tema = String(req.query.tema || '').slice(0, 40);
+  const busca = textoNormalizado(String(req.query.q || '').slice(0, 120));
+  const limite = Math.min(500, Math.max(24, parseInt(req.query.limite, 10) || 120));
+  const avisos = [];
+  let itens = [];
+
+  if (fonte !== 'vip') itens.push(...catalogoPnipe());
+  if (fonte !== 'pnipe') {
+    try { itens.push(...await catalogoVip()); }
+    catch (e) {
+      console.error(`VIP indisponível na vitrine: ${e.message}`);
+      avisos.push('A base VIP está temporariamente indisponível; os dados do PNIPE continuam acessíveis.');
+    }
+  }
+
+  const todasInstituicoes = [...new Set(itens.map((i) => i.instituicao).filter(Boolean))].sort();
+  itens = itens.filter((item) => {
+    if (tipo !== 'todos' && item.tipo !== tipo) return false;
+    if (instituicao && item.instituicao !== instituicao) return false;
+    if (tema && item.tema !== tema) return false;
+    return !busca || textoNormalizado(textoBusca(item)).includes(busca);
+  });
+  itens.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+
+  const totalPorTipo = { laboratorios: 0, equipamentos: 0 };
+  const totalPorFonte = { vip: 0, pnipe: 0 };
+  itens.forEach((item) => {
+    totalPorTipo[item.tipo === 'laboratorio' ? 'laboratorios' : 'equipamentos']++;
+    totalPorFonte[item.fonte]++;
+  });
+  // Equipamentos de um mesmo laboratório compartilham coordenadas. Agrupar evita milhares de
+  // marcadores sobrepostos e faz o mapa representar lugares, não linhas da base.
+  const pontosAgrupados = new Map();
+  itens.filter((i) => Number.isFinite(i.latitude) && Number.isFinite(i.longitude)).forEach((item) => {
+    const chave = `${item.latitude.toFixed(6)}:${item.longitude.toFixed(6)}:${item.instituicao}`;
+    const ponto = pontosAgrupados.get(chave) || {
+      id: chave, nome: item.laboratorio || item.nome, instituicao: item.instituicao, cidade: item.cidade,
+      latitude: item.latitude, longitude: item.longitude, total: 0, laboratorios: 0, equipamentos: 0,
+      fontes: new Set(),
+    };
+    ponto.total++;
+    ponto[item.tipo === 'laboratorio' ? 'laboratorios' : 'equipamentos']++;
+    ponto.fontes.add(item.fonte);
+    pontosAgrupados.set(chave, ponto);
+  });
+  const pontos = [...pontosAgrupados.values()].map(({ fontes, ...ponto }) => ({
+    ...ponto, fonte: fontes.size > 1 ? 'ambas' : [...fontes][0],
+  }));
+
+  res.json({
+    total: itens.length, exibidos: Math.min(limite, itens.length), itens: itens.slice(0, limite), pontos,
+    kpi: { ...totalPorTipo, fontes: Object.values(totalPorFonte).filter(Boolean).length,
+      instituicoes: new Set(itens.map((i) => i.instituicao)).size },
+    porFonte: totalPorFonte,
+    filtros: { instituicoes: todasInstituicoes, temas: TEMAS.map(([valor, rotulo]) => ({ valor, rotulo }))
+      .concat({ valor: 'outros', rotulo: 'Outras áreas' }) },
+    avisos,
+  });
+}));
+
 // Busca de laboratórios
 app.get('/api/labs', wrap(async (req, res) => {
   const r = (await getPool()).request();

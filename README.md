@@ -1,6 +1,14 @@
-# Painel_VIP
+# Painel_VIP — Vitrine tecnológica
 
-Painel de laboratórios do VIP, com infraestrutura (equipamentos, cursos atendidos) e dados de localização (instituição, campus, pavilhão, sala).
+Vitrine pública de infraestrutura de pesquisa que apresenta dados do VIP e do PNIPE/MCTI juntos ou separadamente, sempre identificando a fonte de cada registro.
+
+## Experiência pública
+
+- filtros por fonte (VIP, PNIPE ou ambas), laboratórios/equipamentos, instituição e área temática;
+- busca por nome, equipamento, técnica ou palavra-chave;
+- fichas detalhadas com os campos complementares de cada fonte;
+- mapa reativo com os registros que possuem coordenadas geográficas;
+- área técnica de esquema e correlação preservada no código, mas fora da navegação pública.
 
 O front segue a mesma tecnologia do [Observatorio_Tematico](https://github.com/petcau/Observatorio_Tematico): React, Babel e Tailwind carregados via CDN, JSX transformado no navegador, sem build e sem bundler.
 
@@ -18,12 +26,12 @@ O `.env` não é versionado. Use um usuário do banco somente leitura. Não abra
 
 ## Estrutura
 
-- `server.js` — API Express (`/api/filtros`, `/api/resumo`, `/api/labs`, `/api/labs/:id`, `/api/esquema`) com consultas parametrizadas e somente leitura.
+- `server.js` — API Express. A vitrine usa `/api/vitrine`; as rotas anteriores de análise continuam disponíveis para compatibilidade.
 - `public/index.html` — carrega as bibliotecas por CDN e os scripts na ordem.
 - `public/js/config.js` — título, texto do rodapé e origem da API.
 - `public/js/lib/` — formatação, cores e cliente da API.
 - `public/js/components/` e `public/js/App.js` — interface em React (um arquivo por componente).
 - `dados/` — dados do PNIPE para a aba "Correlação VIP × PNIPE" (seção Banco de Dados):
-  - `pnipe_observatorio.xlsx` — planilha original; depois de trocá-la, rode `node scripts/pnipe-para-json.js` para gerar `pnipe.json`;
+  - `pnipe_observatorio.xlsx` — planilha original; depois de trocá-la, rode `node scripts/pnipe-para-json.js` para gerar `pnipe.json` com descrições, áreas, técnicas, contatos, imagens e coordenadas;
   - `dicionario_pnipe_vip.json` — campo do PNIPE ↔ coluna do VIP;
   - `correspondencia_pnipe_vip.json` — laboratório do PNIPE ↔ localização/espaço físico do VIP (feita à mão).

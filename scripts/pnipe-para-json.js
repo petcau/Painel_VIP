@@ -95,6 +95,12 @@ const instituicoes = aba('Instituições');
 const labs = aba('Laboratórios');
 const equip = aba('Equipamentos');
 const verdade = (v) => v === 'True' || v === 'TRUE' || v === '1';
+const numero = (v) => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(String(v).replace(',', '.'));
+  return Number.isFinite(n) ? n : null;
+};
+const texto = (v) => String(v || '').trim() || null;
 
 // Percentual de registros com cada campo preenchido (para o dicionário de campos).
 const preenchimento = (lista) => {
@@ -132,7 +138,26 @@ const saida = {
     nome: l.name,
     sigla: l.initials,
     cidade: l.list_city,
+    estado: l.list_state,
+    descricao: texto(l.about),
+    instituicao_nome: texto(l.institution_name),
+    cep: texto(l.address_zipCode),
+    logradouro: texto(l.address_street),
+    numero: texto(l.address_number),
+    complemento: texto(l.address_complement),
+    bairro: texto(l.address_district),
+    latitude: numero(l.latitude),
+    longitude: numero(l.longitude),
     compartilhado: verdade(l.hasSharing),
+    compartilhamento: texto(l.sharingType),
+    areas: texto(l.areas_expertise),
+    tecnicas: texto(l.techniques),
+    estruturas: texto(l.organizational_structures),
+    contato: texto(l.contact_name),
+    telefone: texto(l.contact_phone),
+    email: texto(l.email),
+    website: texto(l.website),
+    imagem: texto(l.primary_image_url),
     url: l.public_url,
   })),
   equipamentos: equip.map((e) => ({
@@ -140,10 +165,28 @@ const saida = {
     lab: e.idLab,
     sigla_instituicao: e.observatorio_sigla,
     nome: e.name,
+    sigla: texto(e.initials),
+    codigo: texto(e.code),
+    descricao: texto(e.about),
     marca: e.brand,
     modelo: e.model,
     ano: +e.purchaseYear || null,
     ativo: e.situation === 'ACTIVE',
+    laboratorio_nome: texto(e.laboratory_name),
+    cidade: texto(e.laboratory_city),
+    estado: texto(e.laboratory_state),
+    multiusuario: verdade(e.multiuser),
+    compartilhado: verdade(e.hasSharing),
+    compartilhamento: texto(e.sharingType),
+    contato: texto(e.contact_name),
+    telefone: texto(e.contact_phone),
+    email: texto(e.email),
+    website: texto(e.website),
+    denominacoes: texto(e.denominations),
+    tecnicas: texto(e.techniques),
+    parametros: texto(e.parameters),
+    imagem: texto(e.primary_image_url),
+    url: texto(e.public_url),
   })),
 };
 
